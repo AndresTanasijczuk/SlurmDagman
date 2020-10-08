@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+"""
+Copyright (C) 2020  Universite catholique de Louvain, Belgium.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+from datetime import datetime as dt
+import os
+import sys
+import subprocess
+import traceback
+
+from SlurmDagman.dag.utils.rescue_dag import get_dag_file_rootname
+from SlurmDagman.process.command.arguments import options
+
+
+slurm_dagman = 'slurm_dagman'
+if 'SLURM_DAGMAN_DIR' in os.environ and os.environ['SLURM_DAGMAN_DIR'].strip() != '':
+    slurm_dagman = os.path.join(os.environ['SLURM_DAGMAN_DIR'].strip(), 'slurm_dagman')
+    if not os.path.isfile(slurm_dagman):
+        msg  = 'ERROR: Executable script %s does not exist.' % (slurm_dagman)
+        msg += '\nMake sure the environment variable SLURM_DAGMAN_DIR points to the directory where the slurm_dagman script is located.'
+        print(msg)
+        sys.exit(1)
+
+cmd = [slurm_dagman,
+       '--do-rescue-from', '%i' % (options['do_rescue_from']),
+       '--outfile', options['outfile'],
+       '--sleep-time', '%i' % (options['sleep_time']),
+       '--max-jobs-queued', '%i' % (options['max_jobs_queued']),
+       '--max-jobs-submit', '%i' % (options['max_jobs_submit']),
+       '--submit-wait-time', '%i' % (options['submit_wait_time']),
+]
+if options['no_rescue']:
+    cmd.append('--no-rescue')
+if options['use_proxy']:
+    cmd.append('--use-proxy')
+    if options['proxy_file']:
+        cmd.append('--proxy-file')
+        cmd.append('%s' % options['proxy_file'])
+cmd.append(get_dag_file_rootname(options['dag_file']))
+
+rc = 1
+try:
+    with open(options['logfile'], 'a') as fd:
+        fd.write('\n========== %s ==========\n\n' % (dt.now().strftime("%Y-%m-%d %H:%M:%S")))
+        p = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
+except IOError:
+    print('ERROR: Submission to slurm_dagman failed.')
+    traceback.print_exception(*sys.exc_info())
+except Exception:
+    with open(options['logfile'], 'a') as fd:
+        traceback.print_exception(*sys.exc_info(), file=fd)
+    msg  = 'ERROR: Submission to slurm_dagman failed.'
+    msg += '\nCheck %s' % (options['logfile'])
+    print(msg)
+else:
+    msg  = 'DAG submitted to slurm_dagman.'
+    msg += '\nProgress of the DAG is logged into %s' % (options['outfile'])
+    msg += '\nErrors in slurm_dagman are logged into %s' % (options['logfile'])
+    print(msg)
+    rc = 0
+
+sys.exit(rc)

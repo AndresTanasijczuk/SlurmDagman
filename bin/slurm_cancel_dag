@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+"""
+Copyright (C) 2020  Universite catholique de Louvain, Belgium.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+import signal
+import sys
+
+from SlurmDagman.utils.process import find_slurm_dagman_pids_for_current_user, send_signal
+
+
+rc = 1
+user, slurm_dagman_pids = find_slurm_dagman_pids_for_current_user()
+num_slurm_dagman_processes = len(slurm_dagman_pids)
+if num_slurm_dagman_processes == 1:
+    print('Found one slurm_dagman process (%s) belonging to user %s.' % (slurm_dagman_pids[0], user))
+    send_signal(slurm_dagman_pids[0], signal.SIGTERM)
+    rc = 0
+else:
+    if num_slurm_dagman_processes == 0:
+        msg  = 'Error: Did not find any slurm_dagman process belonging to user %s.' % (user)
+        print(msg)
+    else:
+        msg  = 'Error: Found more than one slurm_dagman process belonging to user %s: %s.' % (user, slurm_dagman_pids)
+        msg += ' Do not know which one to cancel.'
+        msg += "\nYou can cancel the dag of a slurm_dagman process by running 'kill -%s <slurm-dagman-pid>' by hand." % (signal.SIGTERM)
+        print(msg)
+
+sys.exit(rc)

@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# When a slurm_dagman process is killed with slurm_cancel_dag or with kill -9, it should create a new rescue dag file.
+# If slurm_dagman is killed by other means, the rescue dag file will be missing, meaning that nodes that were completed
+# successfully will not be marked as DONE and slurm_dagman (if run again on the same DAG) will run these nodes again.
+# This tool is to mark completed nodes as DONE in a DAG file. It takes two arguments as input: the first is the DAG file
+# to fix (choose the one that will be used as input in the next slurm_dagman run) and the second is the slurm_dagman
+# .out file from where the list of completed nodes will be extracted.
+
+script_name=`basename $0`
+
+usage="Usage: ${script_name} dag_file slurm_dagman_out_file"
+usage+="\nwhere dag_file is the file to be fixed and slurm_dagman_out_file if the slurm_dagman .out file that should be read to extract the list of completed nodes."
+
+if [[ $# -eq 2 ]]; then
+    dag_file=$1
+    slurm_dagman_out_file=$2
+else
+    echo "ERROR: Script ${script_name} takes two arguments."
+    echo -e "${usage}"
+    exit 1
+fi
+
+grep 'JOB ' ${dag_file} > ~/.${dag_file}_JOB_lines
+grep 'VARS ' ${dag_file} > ~/.${dag_file}_VARS_lines
+grep 'RETRY ' ${dag_file} > ~/.${dag_file}_RETRY_lines
+grep 'PARENT ' ${dag_file} > ~/.${dag_file}_PARENT_lines
+
+while IFS= read -r line
+do
+    if [[ $line == *"Node "*" completed" ]];
+    then
+        linearray=($line)
+        node=${linearray[3]}
+        sed -i "/^JOB ${node} .*[^DONE]$/ s/$/ DONE/g1" ~/.${dag_file}_JOB_lines
+    fi
+done < ${slurm_dagman_out_file}
+
+dag_file_fixed=${dag_file}_fixed
+
+#while IFS= read -r line
+#do
+#    if [[ $line == "JOB "* && $line != *" DONE" ]];
+#    then
+#        linearray=($line)
+#        node=${linearray[1]}
+#        grep -q "Node ${node} completed" ${slurm_dagman_out_file}
+#        if [[ $? -eq 0 ]];
+#        then
+#            line="${line} DONE"
+#        fi
+#    fi
+#    echo ${line} >> ${dag_file_fixed}
+#done < ${dag_file}
+
+paste -d \\n ~/.${dag_file}_JOB_lines ~/.${dag_file}_VARS_lines > ~/.${dag_file}_JOB_VARS_lines
+rm ~/.${dag_file}_JOB_lines ~/.${dag_file}_VARS_lines
+cat ~/.${dag_file}_JOB_VARS_lines ~/.${dag_file}_RETRY_lines ~/.${dag_file}_PARENT_lines > ${dag_file_fixed}
+rm ~/.${dag_file}_JOB_VARS_lines ~/.${dag_file}_RETRY_lines ~/.${dag_file}_PARENT_lines
+
+echo "Fixed dag saved to ${dag_file_fixed}"

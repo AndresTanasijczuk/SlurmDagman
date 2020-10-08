@@ -1,0 +1,89 @@
+#!/usr/bin/env python
+"""
+Copyright (C) 2020  Universite catholique de Louvain, Belgium.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+import os
+import sys
+
+from argparse import ArgumentParser
+
+from SlurmDagman.config.data.package import package_config
+from SlurmDagman.translators.condor_to_slurm import CondorToSlurmTranslator
+
+
+parser = ArgumentParser(description="Translate a HTCondor DAG file and all the therein referenced submission files to SLURM")
+
+parser.add_argument("--slurm-partition",
+                    dest = "slurm_partition",
+                    default = package_config.get_param('SLURM', 'partition'),
+                    help = "(partition to use in the Slurm submission file)")
+
+parser.add_argument("--slurm-qos",
+                    dest = "slurm_qos",
+                    default = package_config.get_param('SLURM', 'qos'),
+                    help = "(qos to use in the Slurm submission file)")
+
+parser.add_argument("--slurm-time-limit",
+                    dest = "slurm_time_limit",
+                    default = package_config.get_param('SLURM', 'time_limit'),
+                    help = "(time limit to use in the Slurm submission file)")
+
+parser.add_argument("--slurm-scratch-dir",
+                    dest = "slurm_scratch_dir",
+                    default = package_config.get_param('SLURM', 'scratch_dir'),
+                    help = "(replace _CONDOR_SCRATCH_DIR with this scratch directory)")
+
+parser.add_argument("--slurm-use-setsid",
+                    action = "store_true",
+                    dest = "slurm_use_setsid",
+                    default = False,
+                    help = "(change the user payload in the Slurm submission file so that it will be run in a new session by means of setsid)")
+
+parser.add_argument("--singularity-image",
+                    dest = "singularity_image",
+                    default = '',
+                    help = "(change the user payload in the Slurm submission file so that it will be run with singularity, with the given singularity image)")
+
+parser.add_argument("--singularity-bind-mount-dbus",
+                    action = "store_true",
+                    dest = "singularity_bind_mount_dbus",
+                    default = False,
+                    help = "(add the bind mount of dbus directories to singularity in the Slurm submission file; this option only makes sense if a singularity image is provided with --singularity-image)")
+
+parser.add_argument("dagfile",
+                    nargs = 1,
+                    help = "(a HTCondor DAG file)")
+
+args = parser.parse_args()
+
+_condor_dag_file = args.dagfile[0]
+if not os.path.exists(_condor_dag_file):
+    print("ERROR: %s does not exist." % (_condor_dag_file))
+    sys.exit(1)
+if not os.path.isfile(_condor_dag_file):
+    print("ERROR: %s is not a file." % (_condor_dag_file))
+    sys.exit(1)
+
+if args.singularity_bind_mount_dbus and not args.singularity_image:
+    parser.error('Option --singularity-bind-mount-dbus only makes sense if a singularity image is provided with --singularity-image.')
+
+translator = CondorToSlurmTranslator(_condor_dag_file, _condor_dag_file + '.slurm',
+                                     args.slurm_partition, args.slurm_qos, args.slurm_time_limit, args.slurm_scratch_dir, args.slurm_use_setsid,
+                                     args.singularity_image, args.singularity_bind_mount_dbus)
+translator.translate()
+    
+sys.exit(0)
