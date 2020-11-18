@@ -60,6 +60,7 @@ class Worker(object):
         self.start_time = datetime.datetime.now().isoformat().split('.')[0]
         self.wckey = 'slurm_dagman_%s' % (self.start_time.lower())
         self.queued_job_ids = []
+        self.computing_nodes_running_gstlal_ifo_jobs = {}
 
 
     def __init_dag(self, dag_file=None):
@@ -83,7 +84,7 @@ class Worker(object):
 
     def __init_params(self):
         self.sleep_time, self.max_jobs_queued, self.max_jobs_submit, self.submit_wait_time, \
-        self.drain, self.cancel \
+        self.drain, self.cancel, self.limit_gstlal_ifo_jobs, self.max_gstlal_ifo_jobs_per_computing_node \
             = self.__get_config_params(process_config).values()
 
 
@@ -107,6 +108,8 @@ class Worker(object):
         params['submit_wait_time'] = self.__get_config_param(config, 'DAGMAN', 'submit_wait_time', fallback, 'int')
         params['drain'] = self.__get_config_param(config, 'DAGMAN', 'drain', fallback, 'boolean')
         params['cancel'] = self.__get_config_param(config, 'DAGMAN', 'cancel', fallback, 'boolean')
+        params['limit_gstlal_ifo_jobs'] = self.__get_config_param(config, 'DAGMAN', 'limit_gstlal_ifo_jobs', fallback, 'boolean')
+        params['max_gstlal_ifo_jobs_per_computing_node'] = self.__get_config_param(config, 'DAGMAN', 'max_gstlal_ifo_jobs_per_computing_node', fallback, 'int')
         if sanitize:
             for name, value in params.items():
                 params[name] = self.__replace_negative_int_by_zero(value)
@@ -135,7 +138,7 @@ class Worker(object):
 
 
     def set_params(self, sleep_time=None, max_jobs_queued=None, max_jobs_submit=None, submit_wait_time=None,
-                         drain=None, cancel=None):
+                         drain=None, cancel=None, limit_gstlal_ifo_jobs=None, max_gstlal_ifo_jobs_per_computing_node=None):
         if sleep_time is not None:
             self.sleep_time = self.__replace_negative_int_by_zero(sleep_time)
         if max_jobs_queued is not None:
@@ -148,6 +151,10 @@ class Worker(object):
             self.drain = drain
         if cancel is not None:
             self.cancel = cancel
+        if limit_gstlal_ifo_jobs is not None:
+            self.limit_gstlal_ifo_jobs = limit_gstlal_ifo_jobs
+        if max_gstlal_ifo_jobs_per_computing_node is not None:
+            self.max_gstlal_ifo_jobs_per_computing_node = self.__replace_negative_int_by_zero(max_gstlal_ifo_jobs_per_computing_node)
         self.__set_process_config_params()
         self.__write_process_config()
 
@@ -159,6 +166,8 @@ class Worker(object):
         self.process_config.set_param('DAGMAN', 'submit_wait_time', self.submit_wait_time )
         self.process_config.set_param('DAGMAN', 'drain', self.drain)
         self.process_config.set_param('DAGMAN', 'cancel', self.cancel)
+        self.process_config.set_param('DAGMAN', 'limit_gstlal_ifo_jobs', self.limit_gstlal_ifo_jobs)
+        self.process_config.set_param('DAGMAN', 'max_gstlal_ifo_jobs_per_computing_node', self.max_gstlal_ifo_jobs_per_computing_node)
  
 
     def __write_process_config(self):
@@ -196,7 +205,7 @@ class Worker(object):
         # we will return True if there is no None parameter and False otherwise.
         params = list(self.__get_process_config_params().values())
         sleep_time, max_jobs_queued, max_jobs_submit, submit_wait_time, \
-        drain, cancel \
+        drain, cancel, limit_gstlal_ifo_jobs, max_gstlal_ifo_jobs_per_computing_node \
             = params[:]
         if log_changes:
             if sleep_time is not None and sleep_time != self.sleep_time:
@@ -211,6 +220,13 @@ class Worker(object):
                 logging.info("Dag config change detected: drain set to %s" % (drain))
             if cancel is not None and cancel != self.cancel:
                 logging.info("Dag config change detected: cancel set to %s" % (cancel))
+            if limit_gstlal_ifo_jobs is not None and limit_gstlal_ifo_jobs != self.limit_gstlal_ifo_jobs:
+                logging.info("Dag config change detected: limit_gstlal_ifo_jobs set to %s" % (limit_gstlal_ifo_jobs))
+            if max_gstlal_ifo_jobs_per_computing_node is not None and max_gstlal_ifo_jobs_per_computing_node != self.max_gstlal_ifo_jobs_per_computing_node:
+                msg = "Dag config change detected: max_gstlal_ifo_jobs_per_computing_node set to %s" % (max_gstlal_ifo_jobs_per_computing_node)
+                if not limit_gstlal_ifo_jobs:
+                    msg += ". However, this has no effect, since the limiting behaviour of gstlal ifo jobs is deactivated"
+                logging.info(msg)
         if sleep_time is not None:
             self.sleep_time = sleep_time
         if max_jobs_queued is not None:
@@ -223,6 +239,10 @@ class Worker(object):
             self.drain = drain
         if cancel is not None:
             self.cancel = cancel
+        if limit_gstlal_ifo_jobs is not None:
+            self.limit_gstlal_ifo_jobs = limit_gstlal_ifo_jobs
+        if max_gstlal_ifo_jobs_per_computing_node is not None:
+            self.max_gstlal_ifo_jobs_per_computing_node = max_gstlal_ifo_jobs_per_computing_node
         return None not in params
 
 
@@ -293,14 +313,54 @@ class Worker(object):
         self.dag.write(dag_file, use_dag_nodes_appearance_order=True, add_done_labels=add_done_labels)
 
 
+    def __get_available_computing_nodes(self):
+        cmd = ['sinfo', '--partition=cp3', '--Node', '--states=mix,idle', '--format=%N', '--noheader']
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        out = out.decode('utf-8').strip()
+        err = err.decode('utf-8').strip()
+        available_computing_nodes = out.split('\n') if (out and not err) else []
+        return available_computing_nodes
+
+
+    def __is_gstlal_ifo_node(self, name):
+        if re.search('gstlal_inspiral(_inj)?_[1,2,3]ifo', name):
+            return True
+        return False
+
+
+    def __get_computing_node_for_gstlal_ifo_job(self):
+        computing_node = None
+        available_computing_nodes = self.__get_available_computing_nodes()
+        gstlal_ifo_jobs_per_computing_node = 0
+        while computing_node is None and self.max_gstlal_ifo_jobs_per_computing_node > 0 and gstlal_ifo_jobs_per_computing_node < self.max_gstlal_ifo_jobs_per_computing_node:
+            for available_computing_node in available_computing_nodes:
+                if len(self.computing_nodes_running_gstlal_ifo_jobs.get(available_computing_node, set())) == gstlal_ifo_jobs_per_computing_node:
+                    computing_node = available_computing_node
+                    break
+            gstlal_ifo_jobs_per_computing_node += 1
+        return computing_node
+
+
     def __submit_ready_nodes(self):
         num_submitted_nodes = 0
+        num_submitted_gstlal_ifo_nodes = 0
         for node in self.dag:
             if self.max_jobs_queued > 0 and len(self.queued_job_ids) >= self.max_jobs_queued:
                 break
             if self.dag[node]['status'] == 1: # node ready to be submitted
+                computing_node = None
+                after = []
+                is_gstlal_ifo_node = self.__is_gstlal_ifo_node(node)
+                if is_gstlal_ifo_node:
+                    if num_submitted_gstlal_ifo_nodes > 0:
+                        continue
+                    elif self.limit_gstlal_ifo_jobs:
+                        computing_node = self.__get_computing_node_for_gstlal_ifo_job()
+                        if computing_node is None:
+                            continue 
                 # Submit a job
-                job_id, error = self.__submit(self.dag[node]['job_submission_file'], node)
+                job_id, error = self.__submit(self.dag[node]['job_submission_file'], node, computing_node, after)
                 if job_id is not None:
                     if 'retry_num' in self.dag[node] and self.dag[node]['retry_num'] > 0:
                         logging.info('Submitted node %s (retry number %i out of %i): %s' % (node, self.dag[node]['retry_num'], self.dag.get_max_retries(node), job_id))
@@ -309,6 +369,10 @@ class Worker(object):
                     self.__mark_node_as_queued(node, job_id)
                     self.queued_job_ids.append(job_id)
                     num_submitted_nodes += 1
+                    if is_gstlal_ifo_node:
+                        num_submitted_gstlal_ifo_nodes += 1
+                        if self.limit_gstlal_ifo_jobs:
+                            self.__add_gstlal_ifo_job(job_id, computing_node)
                 else:
                     self.__mark_node_as_queued(node)
                     if 'retry_num' in self.dag[node] and self.dag[node]['retry_num'] > 0:
@@ -328,12 +392,17 @@ class Worker(object):
                     time.sleep(self.submit_wait_time)
 
 
-    def __submit(self, job_submission_file, node):
+    def __submit(self, job_submission_file, node, computing_node=None, after=[]):
         with open(job_submission_file + '.tmp', 'w') as fd1:
             with open(job_submission_file, 'r') as fd2:
                 for line in fd2:
                     fd1.write(self.__replace_vars(line, node))
-        cmd = ['sbatch', '--job-name=%s' % (node), '--wckey=%s' % (self.wckey), job_submission_file + '.tmp']
+        cmd = ['sbatch', '--job-name=%s' % (node), '--wckey=%s' % (self.wckey)]
+        if computing_node is not None:
+            cmd.append('--nodelist=%s' % (computing_node))
+        if after:
+            cmd.append('--dependency=afterany:%s' % (':'.join(after)))
+        cmd.append(job_submission_file + '.tmp')
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()
         out = out.decode('utf-8').strip()
@@ -404,6 +473,16 @@ class Worker(object):
         return out, err
 
 
+    def __get_requested_computing_node(self, job_id):
+        cmd = ['squeue', '--noheader', '--Format=ReqNodes', '--jobs=%s' % (job_id)]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        out = out.decode('utf-8').strip()
+        err = err.decode('utf-8').strip()
+        req_comp_node = out if (out and not err) else ''
+        return req_comp_node
+
+
     def __monitor(self):
         num_nodes_running = 0
         num_nodes_pending = 0
@@ -424,16 +503,24 @@ class Worker(object):
             if job_id in squeue_result:
                 status = squeue_result[job_id]['status']
                 computing_node = squeue_result[job_id]['computing_node']
+            is_gstlal_ifo_node = self.__is_gstlal_ifo_node(job_name)
             #if self.dag[job_name]['status'] == 2:
             if status == 'PENDING':
                 num_nodes_pending += 1
+                if self.limit_gstlal_ifo_jobs and is_gstlal_ifo_node:
+                    requested_computing_node = self.__get_requested_computing_node(job_id)
+                    self.__add_gstlal_ifo_job(job_id, requested_computing_node)
             elif status in ['RUNNING', 'COMPLETING']:
                 num_nodes_running += 1
+                if self.limit_gstlal_ifo_jobs and is_gstlal_ifo_node:
+                    self.__add_gstlal_ifo_job(job_id, computing_node)
             elif status == 'COMPLETED':
                 logging.info('Node %s completed' % (job_name))
                 self.__mark_node_as_done(job_name)
                 nodes_done.add(job_name)
                 self.queued_job_ids.remove(job_id)
+                if self.limit_gstlal_ifo_jobs and is_gstlal_ifo_node:
+                    self.__remove_gstlal_ifo_job(job_id)
             elif status in ['RESIZING', 'REQUEUED', 'REVOKED', 'SUSPENDED']:
                 num_nodes_unknown += 1
             else:
@@ -447,9 +534,25 @@ class Worker(object):
                 else:
                     self.__mark_node_as_failed(job_name)
                 self.queued_job_ids.remove(job_id)
+                if self.limit_gstlal_ifo_jobs and is_gstlal_ifo_node:
+                    self.__remove_gstlal_ifo_job(job_id)
         if nodes_done:
             self.__fix_parents(nodes_done)
         return num_nodes_running, num_nodes_pending, num_nodes_unknown
+
+
+    def __add_gstlal_ifo_job(self, job_id, computing_node):
+        if computing_node not in self.computing_nodes_running_gstlal_ifo_jobs:
+            self.computing_nodes_running_gstlal_ifo_jobs[computing_node] = set()
+        self.computing_nodes_running_gstlal_ifo_jobs[computing_node].add(job_id)
+
+
+    def __remove_gstlal_ifo_job(self, job_id):
+        for m in self.computing_nodes_running_gstlal_ifo_jobs.keys():
+            if job_id in self.computing_nodes_running_gstlal_ifo_jobs[m]:
+                self.computing_nodes_running_gstlal_ifo_jobs[m].remove(job_id)
+                if not self.computing_nodes_running_gstlal_ifo_jobs[m]:
+                    self.computing_nodes_running_gstlal_ifo_jobs.pop(m)
 
 
     def __fix_parents(self, nodes_done):
