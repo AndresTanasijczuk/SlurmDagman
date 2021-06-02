@@ -55,7 +55,7 @@ class Dag(object):
 
 
     def get_nodes(self):
-        return self.dag.keys()
+        return list(self.dag.keys())
 
 
     def parse(self):
@@ -205,7 +205,7 @@ class Dag(object):
         if use_dag_nodes_appearance_order and self.dag_nodes_appearance_order:
             nodes = sorted(self.dag_nodes_appearance_order, key=self.dag_nodes_appearance_order.get)
         else:
-            nodes = self.dag.keys()
+            nodes = self.get_nodes()
         jobs_lines = []
         for node in nodes:
             job_line = 'JOB %s %s' % (node, self.dag[node]['job_submission_file'])

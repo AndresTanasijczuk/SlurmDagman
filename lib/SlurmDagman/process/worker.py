@@ -194,7 +194,7 @@ class Worker(object):
         # type.) In case of such a failure, we get None for that parameter;
         # so we have to handle the case of a parameter being None. Finally,
         # we will return True if there is no None parameter and False otherwise.
-        params = self.__get_process_config_params().values()
+        params = list(self.__get_process_config_params().values())
         sleep_time, max_jobs_queued, max_jobs_submit, submit_wait_time, \
         drain, cancel \
             = params[:]
@@ -270,7 +270,7 @@ class Worker(object):
 
 
     def __pre_write_dag(self):
-        for node in copy.copy(self.dag_done.keys()):
+        for node in list(self.dag_done.keys()):
             if node not in self.dag:
                 self.dag[node] = copy.deepcopy(self.dag_done[node])
             else:

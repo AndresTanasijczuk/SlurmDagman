@@ -50,7 +50,7 @@ class ConfigManager(object):
     def set_param(self, section, option, value):
         if not self.config.has_section(section):
             self.config.add_section(section)
-        self.config.set(section, option, value)
+        self.config.set(section, option, str(value))
 
 
     def get_params(self, sections_and_options=None):
