@@ -389,6 +389,7 @@ class Worker(object):
         out = out.decode('utf-8').strip().split('\n')
         err = err.decode('utf-8').strip().split('\n')
         out = [l for l in out if l and l.find('|batch|') == -1 and l.find('|extern|') == -1]
+        if len(err) == 1 and err[0] == '': err = []
         return out, err
 
 
@@ -399,6 +400,7 @@ class Worker(object):
         out = out.decode('utf-8').strip().split('\n')
         err = err.decode('utf-8').strip().split('\n')
         out = [l for l in out if l and l.find('|%s|' % (self.wckey)) > 0]
+        if len(err) == 1 and err[0] == '': err = []
         return out, err
 
 
