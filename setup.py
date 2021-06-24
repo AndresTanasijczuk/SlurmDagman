@@ -1,19 +1,29 @@
 """ Setuptools-based setup module for SlurmDagman """
 
 from setuptools import setup, find_packages
-import os, os.path
+import io
+import os
 
-from io import open
-with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "README.md"), encoding="utf-8") as f:
-    long_description = f.read()
+def read(rel_path):
+    here = os.path.abspath(os.path.dirname(__file__))
+    with io.open(os.path.join(here, rel_path), 'r', encoding="utf-8") as fp:
+        return fp.read()
 
-from SlurmDagman import __version__ as version
+def get_version(rel_path):
+    for line in read(rel_path).splitlines():
+        if line.startswith('__version__'):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
 
 pkgName = "SlurmDagman"
 
+long_description = read("README.md")
+
 setup(
     name=pkgName,
-    version=version,
+    version=get_version("lib/SlurmDagman/__init__.py"),
 
     description="Application to run a DAG with SLURM.",
     long_description=long_description,
