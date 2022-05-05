@@ -29,7 +29,7 @@ from SlurmDagman.dag.utils.rescue_dag import get_dag_file_rootname, get_highest_
 
 
 def exit(msg):
-    print('ERROR: %s' % (msg))
+    print(('ERROR: %s' % (msg)))
     sys.exit(1)
 
 

@@ -19,6 +19,7 @@ import copy
 import datetime
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -43,6 +44,7 @@ class Worker(object):
         super(Worker, self).__init__()
         self.outfile = outfile
         self.__set_logging()
+        logging.info('Using python %s' % (platform.python_version()))
         self.__init_dag(dag_file)
         self.proxy = proxy
         self.__init_params()
@@ -84,7 +86,7 @@ class Worker(object):
     def __init_params(self):
         self.sleep_time, self.max_jobs_queued, self.max_jobs_submit, self.submit_wait_time, \
         self.drain, self.cancel \
-            = self.__get_config_params(process_config).values()
+            = list(self.__get_config_params(process_config).values())
 
 
     def __init_process_config(self):
@@ -108,7 +110,7 @@ class Worker(object):
         params['drain'] = self.__get_config_param(config, 'DAGMAN', 'drain', fallback, 'boolean')
         params['cancel'] = self.__get_config_param(config, 'DAGMAN', 'cancel', fallback, 'boolean')
         if sanitize:
-            for name, value in params.items():
+            for name, value in list(params.items()):
                 params[name] = self.__replace_negative_int_by_zero(value)
         return params
 
@@ -252,7 +254,7 @@ class Worker(object):
                 self.dag_done[node] = copy.deepcopy(self.dag[node])
                 self.dag.__dict__().pop(node)
         del nodes_all
-        nodes_done = self.dag_done.keys()
+        nodes_done = list(self.dag_done.keys())
         self.num_nodes_done = len(nodes_done)
         self.num_nodes_unready -= self.num_nodes_done
         nodes_not_done = self.dag.get_nodes()

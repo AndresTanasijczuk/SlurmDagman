@@ -42,8 +42,8 @@ class ConfigManager(object):
 
 
     def set_params(self, params):
-        for section in params.keys():
-            for option, value in params[section].items():
+        for section in list(params.keys()):
+            for option, value in list(params[section].items()):
                 self.set_param(section, option, value)
 
 
@@ -62,7 +62,7 @@ class ConfigManager(object):
                 for option in self.config.options(section):
                     params[section][option] = self.get_param(section, option)
         else:
-            for section in sections_and_options.keys():
+            for section in list(sections_and_options.keys()):
                 if section not in params:
                     params[section] = OrderedDict()
                 # options could be a list or a dict (in which case we only care about the keys)
@@ -92,7 +92,7 @@ class ConfigManager(object):
 
     def validate(self, sections_and_options, must_exist=False):
         for section in self.config.sections():
-            if section not in sections_and_options.keys():
+            if section not in list(sections_and_options.keys()):
                 msg = 'Bad configuration: invalid section name %s' % (section)
                 raise ConfigurationError(msg, section)
             for option in self.config.options(section):
@@ -100,7 +100,7 @@ class ConfigManager(object):
                     msg = 'Bad configuration: invalid option name %s in section %s' % (option, section)
                     raise ConfigurationError(msg, section, option)
         if must_exist:
-            for section in sections_and_options.keys():
+            for section in list(sections_and_options.keys()):
                 if not self.config.has_section(section):
                     msg = 'Bad configuration: missing section %s' % (section)
                     raise ConfigurationError(msg, section)

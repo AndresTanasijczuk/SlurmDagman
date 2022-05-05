@@ -38,7 +38,7 @@ def get_user_processes(user):
 
 def find_slurm_dagman_pids(processes):
     pids = []
-    for pid, command in processes.items():
+    for pid, command in list(processes.items()):
         if command.split(' ')[0] == 'python' and command.split(' ')[1].split('/')[-1] == 'slurm_dagman':
             pids.append(pid)
     return pids

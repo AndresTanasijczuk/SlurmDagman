@@ -29,9 +29,9 @@ package_config.set_params(common_config_defaults)
 package_config.load_from_file(get_possible_package_config_locations())
 defaults = {} 
 for d in [package_config_defaults, common_config_defaults]:
-    for section in d.keys():
+    for section in list(d.keys()):
         if section not in defaults:
             defaults[section] = {}
-        for option in d[section].keys():
+        for option in list(d[section].keys()):
             defaults[section][option] = None
 package_config.validate(defaults)
