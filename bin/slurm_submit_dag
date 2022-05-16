@@ -40,6 +40,7 @@ cmd = [slurm_dagman,
        '--outfile', options['outfile'],
        '--sleep-time', '%i' % (options['sleep_time']),
        '--max-jobs-queued', '%i' % (options['max_jobs_queued']),
+       '--max-jobs-pending', '%i' % (options['max_jobs_pending']),
        '--max-jobs-submit', '%i' % (options['max_jobs_submit']),
        '--submit-wait-time', '%i' % (options['submit_wait_time']),
 ]

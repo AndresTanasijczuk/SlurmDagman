@@ -30,7 +30,14 @@ SLURM_DAGMAN_WORKER = None
 def init():
     global SLURM_DAGMAN_WORKER
     try:
-        SLURM_DAGMAN_WORKER = Worker(options['dag_file'], options['outfile'], options['proxy_file'], options['sleep_time'], options['max_jobs_queued'], options['max_jobs_submit'], options['submit_wait_time'])
+        SLURM_DAGMAN_WORKER = Worker(dag_file=options['dag_file'],
+                                     outfile=options['outfile'],
+                                     proxy=options['proxy_file'],
+                                     sleep_time=options['sleep_time'],
+                                     max_jobs_queued=options['max_jobs_queued'],
+                                     max_jobs_pending=options['max_jobs_pending'],
+                                     max_jobs_submit=options['max_jobs_submit'],
+                                     submit_wait_time=options['submit_wait_time'])
     except Exception:
         print('Error running slurm_dagman:\n%s' % (traceback.format_exc()))
         sys.exit(1)

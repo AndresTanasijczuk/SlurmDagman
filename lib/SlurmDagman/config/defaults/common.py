@@ -7,5 +7,6 @@ DEFAULTS = OrderedDict()
 DEFAULTS['DAGMAN'] = OrderedDict()
 DEFAULTS['DAGMAN']['sleep_time'] = '120'
 DEFAULTS['DAGMAN']['max_jobs_queued'] = '500'
+DEFAULTS['DAGMAN']['max_jobs_pending'] = '500'
 DEFAULTS['DAGMAN']['max_jobs_submit'] = '0'
 DEFAULTS['DAGMAN']['submit_wait_time'] = '2'

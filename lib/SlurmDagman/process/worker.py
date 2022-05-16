@@ -39,8 +39,8 @@ from SlurmDagman.dag.utils.rescue_dag import build_next_rescue_dag_file_name, ge
 
 class Worker(object):
 
-    def __init__(self, dag_file=None, outfile=None, proxy=None,
-                 sleep_time=None, max_jobs_queued=None, max_jobs_submit=None, submit_wait_time=None):
+    def __init__(self, dag_file=None, outfile=None, proxy=None, sleep_time=None, max_jobs_queued=None,
+                 max_jobs_pending=None, max_jobs_submit=None, submit_wait_time=None):
         super(Worker, self).__init__()
         self.outfile = outfile
         self.__set_logging()
@@ -51,7 +51,7 @@ class Worker(object):
         self.__init_process_config()
         self.process_config.set_params(process_config.get_params())
         self.process_config_file = get_dag_file_rootname(dag_file) + '.slurm_dagman.cfg'
-        self.set_params(sleep_time, max_jobs_queued, max_jobs_submit, submit_wait_time)
+        self.set_params(sleep_time, max_jobs_queued, max_jobs_pending, max_jobs_submit, submit_wait_time)
         self.dag_done = {}
         self.num_nodes_total = 0
         self.num_nodes_done = 0
@@ -84,8 +84,8 @@ class Worker(object):
 
 
     def __init_params(self):
-        self.sleep_time, self.max_jobs_queued, self.max_jobs_submit, self.submit_wait_time, \
-        self.drain, self.cancel \
+        self.sleep_time, self.max_jobs_queued, self.max_jobs_pending, self.max_jobs_submit, self.submit_wait_time, \
+        self.drain, self.cancel\
             = list(self.__get_config_params(process_config).values())
 
 
@@ -105,6 +105,7 @@ class Worker(object):
         params = OrderedDict()
         params['sleep_time'] = self.__get_config_param(config, 'DAGMAN', 'sleep_time', fallback, 'int')
         params['max_jobs_queued'] = self.__get_config_param(config, 'DAGMAN', 'max_jobs_queued', fallback, 'int')
+        params['max_jobs_pending'] = self.__get_config_param(config, 'DAGMAN', 'max_jobs_pending', fallback, 'int')
         params['max_jobs_submit'] = self.__get_config_param(config, 'DAGMAN', 'max_jobs_submit', fallback, 'int')
         params['submit_wait_time'] = self.__get_config_param(config, 'DAGMAN', 'submit_wait_time', fallback, 'int')
         params['drain'] = self.__get_config_param(config, 'DAGMAN', 'drain', fallback, 'boolean')
@@ -136,12 +137,14 @@ class Worker(object):
         self.__init_params()
 
 
-    def set_params(self, sleep_time=None, max_jobs_queued=None, max_jobs_submit=None, submit_wait_time=None,
-                         drain=None, cancel=None):
+    def set_params(self, sleep_time=None, max_jobs_queued=None, max_jobs_pending=None, max_jobs_submit=None,
+                   submit_wait_time=None, drain=None, cancel=None):
         if sleep_time is not None:
             self.sleep_time = self.__replace_negative_int_by_zero(sleep_time)
         if max_jobs_queued is not None:
             self.max_jobs_queued = self.__replace_negative_int_by_zero(max_jobs_queued)
+        if max_jobs_pending is not None:
+            self.max_jobs_pending = self.__replace_negative_int_by_zero(max_jobs_pending)
         if max_jobs_submit is not None:
             self.max_jobs_submit = self.__replace_negative_int_by_zero(max_jobs_submit)
         if submit_wait_time is not None:
@@ -157,6 +160,7 @@ class Worker(object):
     def __set_process_config_params(self):
         self.process_config.set_param('DAGMAN', 'sleep_time', self.sleep_time)
         self.process_config.set_param('DAGMAN', 'max_jobs_queued', self.max_jobs_queued)
+        self.process_config.set_param('DAGMAN', 'max_jobs_pending', self.max_jobs_pending)
         self.process_config.set_param('DAGMAN', 'max_jobs_submit', self.max_jobs_submit )
         self.process_config.set_param('DAGMAN', 'submit_wait_time', self.submit_wait_time )
         self.process_config.set_param('DAGMAN', 'drain', self.drain)
@@ -197,7 +201,7 @@ class Worker(object):
         # so we have to handle the case of a parameter being None. Finally,
         # we will return True if there is no None parameter and False otherwise.
         params = list(self.__get_process_config_params().values())
-        sleep_time, max_jobs_queued, max_jobs_submit, submit_wait_time, \
+        sleep_time, max_jobs_queued, max_jobs_pending, max_jobs_submit, submit_wait_time, \
         drain, cancel \
             = params[:]
         if log_changes:
@@ -205,6 +209,8 @@ class Worker(object):
                 logging.info("Dag config change detected: sleep_time set to %s seconds" % (sleep_time))
             if max_jobs_queued is not None and max_jobs_queued != self.max_jobs_queued:
                 logging.info("Dag config change detected: max_jobs_queued set to %s" % (max_jobs_queued))
+            if max_jobs_pending is not None and max_jobs_pending != self.max_jobs_pending:
+                logging.info("Dag config change detected: max_jobs_pending set to %s" % (max_jobs_pending))
             if max_jobs_submit is not None and max_jobs_submit != self.max_jobs_submit:
                 logging.info("Dag config change detected: max_jobs_submit set to %s" % (max_jobs_submit))
             if submit_wait_time is not None and submit_wait_time != self.submit_wait_time:
@@ -217,6 +223,8 @@ class Worker(object):
             self.sleep_time = sleep_time
         if max_jobs_queued is not None:
             self.max_jobs_queued = max_jobs_queued
+        if max_jobs_pending is not None:
+            self.max_jobs_pending = max_jobs_pending
         if max_jobs_submit is not None:
             self.max_jobs_submit = max_jobs_submit
         if submit_wait_time is not None:
@@ -297,8 +305,11 @@ class Worker(object):
 
     def __submit_ready_nodes(self):
         num_submitted_nodes = 0
+        num_nodes_running, num_nodes_pending, num_nodes_unknown = self.__monitor()
         for node in self.dag:
             if self.max_jobs_queued > 0 and len(self.queued_job_ids) >= self.max_jobs_queued:
+                break
+            if self.max_jobs_pending > 0 and (num_nodes_pending+num_submitted_nodes) >= self.max_jobs_pending:
                 break
             if self.dag[node]['status'] == 1: # node ready to be submitted
                 # Submit a job
