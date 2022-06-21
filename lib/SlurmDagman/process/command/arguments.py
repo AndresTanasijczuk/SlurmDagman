@@ -159,4 +159,5 @@ options['use_proxy'] = args.use_proxy
 options['sleep_time'] = max(args.sleep_time, 0)
 options['max_jobs_queued'] = max(args.max_jobs_queued, 0)
 options['max_jobs_submit'] = max(args.max_jobs_submit, 0)
+options['max_jobs_pending'] = max(args.max_jobs_pending, 0)
 options['submit_wait_time'] = max(args.submit_wait_time, 0)
