@@ -303,9 +303,8 @@ class Worker(object):
         self.dag.write(dag_file, use_dag_nodes_appearance_order=True, add_done_labels=add_done_labels)
 
 
-    def __submit_ready_nodes(self):
+    def __submit_ready_nodes(self, num_nodes_pending):
         num_submitted_nodes = 0
-        num_nodes_running, num_nodes_pending, num_nodes_unknown = self.__monitor()
         for node in self.dag:
             if self.max_jobs_queued > 0 and len(self.queued_job_ids) >= self.max_jobs_queued:
                 break
@@ -539,7 +538,7 @@ class Worker(object):
             if self.num_nodes_queued > 0:
                 logging.info('Of %i nodes queued: %i running, %i pending, %i other' % (self.num_nodes_queued, num_nodes_running, num_nodes_pending, num_nodes_unknown))
             if self.num_nodes_ready > 0 and not self.drain and not self.cancel:
-                self.__submit_ready_nodes()
+                self.__submit_ready_nodes(num_nodes_pending=num_nodes_pending)
             else:
                 if self.num_nodes_done == self.num_nodes_total:
                     logging.info('DAG completed successfully.')
