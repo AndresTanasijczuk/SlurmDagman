@@ -84,6 +84,12 @@ parser.add_argument("--max-jobs-queued",
                     default = int(package_config.get_param('DAGMAN', 'max_jobs_queued')),
                     help = "(maximum number of jobs that can be put in the slurm queue)")
 
+parser.add_argument("--max-jobs-pending",
+                    type = int,
+                    dest = "max_jobs_pending",
+                    default = int(package_config.get_param('DAGMAN', 'max_jobs_pending')),
+                    help = "(maximum number of jobs that are pending in the slurm queue)")
+
 parser.add_argument("--max-jobs-submit",
                     type = int,
                     dest = "max_jobs_submit",
@@ -153,4 +159,5 @@ options['use_proxy'] = args.use_proxy
 options['sleep_time'] = max(args.sleep_time, 0)
 options['max_jobs_queued'] = max(args.max_jobs_queued, 0)
 options['max_jobs_submit'] = max(args.max_jobs_submit, 0)
+options['max_jobs_pending'] = max(args.max_jobs_pending, 0)
 options['submit_wait_time'] = max(args.submit_wait_time, 0)
