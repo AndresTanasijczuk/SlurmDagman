@@ -125,7 +125,8 @@ class CondorToSlurmTranslator(object):
         self.slurm_dag.set_dag(self.condor_dag, True)
         for node in self.slurm_dag:
             self.slurm_dag[node]['job_submission_file'] = self.condor_dag[node]['job_submission_file'] + '.slurm'
-            self.slurm_dag[node]['vars'] = self.slurm_dag[node]['vars'].replace('_CONDOR_SCRATCH_DIR', self.slurm_scratch_dir)
+            if 'vars' in self.slurm_dag[node]:
+                self.slurm_dag[node]['vars'] = self.slurm_dag[node]['vars'].replace('_CONDOR_SCRATCH_DIR', self.slurm_scratch_dir)
 
 
     def __write_slurm_dag_file(self):
